@@ -268,3 +268,205 @@ entity_models:
           EGUF:
           SCAN:
           MODBUS_DATA: INT32_LE
+
+  - name: modbusFloatSetpoint
+    description: |-
+      This will create a writable 32-bit float register (analog output)
+    parameters:
+      P:
+        type: str
+        description: Device Prefix
+      R:
+        type: str
+        description: Device Suffix
+      PORT:
+        type: str
+        description: Port name for the detector
+      DESC:
+        type: str
+        description: |-
+          Setpoint description
+        default: Value
+      OFFSET:
+        type: int
+        description: |-
+          OFFSET register address
+      HOPR:
+        type: float
+        description: |-
+          High Limit
+        default: 0.0
+      LOPR:
+        type: float
+        description: |-
+          Low Limit
+        default: 0.0
+      PREC:
+        type: int
+        description: |-
+          Precision
+        default: 0
+      PINI:
+        type: str
+        description: |-
+          Process at iocInit, Default : NO
+        default: "NO"
+
+    databases:
+      - file: $(SUPPORT)/modbus/db/aoFloat64.template
+        args:
+          P:
+          R:
+          PORT:
+          OFFSET:
+          DESC:
+          HOPR:
+          LOPR:
+          PREC:
+          PINI:
+          DATA_TYPE: FLOAT32_LE
+
+  - name: modbusIntSetpoint
+    description: |-
+      This will create a writable 32-bit integer register
+    parameters:
+      P:
+        type: str
+        description: Device Prefix
+      R:
+        type: str
+        description: Device Suffix
+      PORT:
+        type: str
+        description: Port name for the detector
+      DESC:
+        type: str
+        description: |-
+          Setpoint description
+        default: Value
+      OFFSET:
+        type: int
+        description: |-
+          OFFSET register address
+      PINI:
+        type: str
+        description: |-
+          Process at iocInit, Default : NO
+        default: "NO"
+
+    databases:
+      - file: $(SUPPORT)/modbus/db/longoutInt32.template
+        args:
+          P:
+          R:
+          PORT:
+          OFFSET:
+          DESC:
+          PINI:
+          DATA_TYPE: INT32_LE
+
+  - name: modbusCoilReadout
+    description: |-
+      This will create a single-bit readout (discrete input / coil)
+    parameters:
+      P:
+        type: str
+        description: Device Prefix
+      R:
+        type: str
+        description: Device Suffix
+      PORT:
+        type: str
+        description: Port name for the detector
+      DESC:
+        type: str
+        description: |-
+          Readout description
+        default: Value
+      OFFSET:
+        type: int
+        description: |-
+          Bit OFFSET within the modbus port
+      SCAN:
+        type: str
+        description: |-
+          Scan Mode
+        default: I/O Intr
+      ZNAM:
+        type: str
+        description: |-
+          Zero name (state string for value 0)
+        default: "Off"
+      ONAM:
+        type: str
+        description: |-
+          One name (state string for value 1)
+        default: "On"
+      ZSV:
+        type: str
+        description: |-
+          Zero severity
+        default: NO_ALARM
+      OSV:
+        type: str
+        description: |-
+          One severity
+        default: NO_ALARM
+
+    databases:
+      - file: $(SUPPORT)/modbus/db/bi_bit.template
+        args:
+          P:
+          R:
+          PORT:
+          OFFSET:
+          DESC:
+          SCAN:
+          ZNAM:
+          ONAM:
+          ZSV:
+          OSV:
+
+  - name: modbusCoilWrite
+    description: |-
+      This will create a single-bit write (coil)
+    parameters:
+      P:
+        type: str
+        description: Device Prefix
+      R:
+        type: str
+        description: Device Suffix
+      PORT:
+        type: str
+        description: Port name for the detector
+      DESC:
+        type: str
+        description: |-
+          Write description
+        default: Value
+      OFFSET:
+        type: int
+        description: |-
+          Bit OFFSET within the modbus port
+      ZNAM:
+        type: str
+        description: |-
+          Zero name (state string for value 0)
+        default: "Off"
+      ONAM:
+        type: str
+        description: |-
+          One name (state string for value 1)
+        default: "On"
+
+    databases:
+      - file: $(SUPPORT)/modbus/db/bo_bit.template
+        args:
+          P:
+          R:
+          PORT:
+          OFFSET:
+          DESC:
+          ZNAM:
+          ONAM:

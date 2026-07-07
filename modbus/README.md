@@ -1,6 +1,6 @@
 # Modbus Support Configuration
 
-The current Modbus support is primarily focused on creating Input/Output Controllers (IOCs) that interact with Modbus TCP instrumentation. Presently, the **ibek support** is limited to reading 32-bit integers and floating-point registers.
+The current Modbus support is primarily focused on creating Input/Output Controllers (IOCs) that interact with Modbus TCP instrumentation. The **ibek support** covers reading and writing 32-bit integer and floating-point registers (`modbusFloatReadout`/`modbusFloatSetpoint`, `modbusIntReadout`/`modbusIntSetpoint`), and reading/writing single coils or discrete inputs (`modbusCoilReadout`/`modbusCoilWrite`).
 
 This support has undergone testing with *plc M340* and *electrex*.
 
