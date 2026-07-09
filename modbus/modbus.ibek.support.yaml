@@ -281,12 +281,14 @@ entity_models:
 
   - name: modbusUIntReadout
     description: |-
-      This will create an unsigned 32-bit point record.
-      The modbus module only supports signed INT32_LE/INT32_BE reads, so a
-      genuine unsigned counter (e.g. a cumulative energy register) whose top
-      bit is set would read back as negative. This entity reads the raw
-      signed value into a hidden helper record and corrects it (adds 2^32
-      when negative) into the public PV.
+      This will create an unsigned 32-bit point record, using the module's
+      own int64in.template (asynInt64). The modbus driver does support a
+      native UINT32_LE/UINT32_BE data type, but reading it through asynInt32
+      (as ai/longin do) would still truncate back into a signed 32-bit
+      container and go negative for values above 2^31; asynInt64 has enough
+      range to hold the full unsigned 32-bit value without wraparound.
+      Note: int64in.template only exposes DTYP/INP/SCAN, so DESC/EGU/HOPR/
+      LOPR/PREC are not settable here (unlike modbusIntReadout/modbusFloatReadout).
     parameters:
       P:
         type: str
@@ -297,39 +299,14 @@ entity_models:
       PORT:
         type: str
         description: Port name for the detector
-      DESC:
-        type: str
-        description: |-
-          Readout description
-        default: Value
       OFFSET:
         type: int
         description: |-
           OFFSET register address
-      EGU:
-        type: str
-        description: |-
-          Engineering Units
-        default: None
-      HOPR:
-        type: float
-        description: |-
-          High Limit
-        default: 0
-      LOPR:
-        type: float
-        description: |-
-          Low Limit
-        default: 0
-      PREC:
-        type: int
-        description: |-
-          Precision
-        default: 0
       SCAN:
         type: str
         description: |-
-          Scan Mode of the underlying raw readout
+          Scan Mode
         default: I/O Intr
       FORMAT:
         type: str
@@ -337,19 +314,14 @@ entity_models:
           Word order of the 32-bit register: LE (default) or BE
         default: LE
     databases:
-      - file: modbusUInt32.template
+      - file: $(SUPPORT)/modbus/db/int64in.template
         args:
           P:
           R:
           PORT:
           OFFSET:
-          DESC:
-          EGU:
-          HOPR:
-          LOPR:
-          PREC:
           SCAN:
-          FORMAT:
+          DATA_TYPE: "UINT32_{{FORMAT}}"
 
   - name: modbusFloatSetpoint
     description: |-
