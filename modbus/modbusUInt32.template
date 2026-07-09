@@ -1,0 +1,24 @@
+# Unsigned 32-bit modbus readout.
+#
+# The modbus driver only supports signed INT32_LE/INT32_BE reads (there is
+# no native UINT32 data type), so a genuine unsigned 32-bit register (e.g. a
+# cumulative energy counter) whose top bit is set would read back negative.
+# The hidden "_raw" record does the signed read; the public record corrects
+# the two's-complement wraparound by adding 2^32 when the raw value is
+# negative.
+
+record(ai, "$(P)$(R)_raw") {
+    field(DTYP,"asynInt32")
+    field(INP,"@asynMask($(PORT) $(OFFSET) 32)INT32_$(FORMAT=LE)")
+    field(SCAN,"$(SCAN=I/O Intr)")
+}
+
+record(calc, "$(P)$(R)") {
+    field(INPA,"$(P)$(R)_raw CP")
+    field(CALC,"A<0?A+4294967296:A")
+    field(DESC,"$(DESC=Value)")
+    field(EGU,"$(EGU=None)")
+    field(HOPR,"$(HOPR=0)")
+    field(LOPR,"$(LOPR=0)")
+    field(PREC,"$(PREC=0)")
+}

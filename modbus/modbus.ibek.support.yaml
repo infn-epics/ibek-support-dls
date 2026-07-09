@@ -181,6 +181,11 @@ entity_models:
         description: |-
           Precision
         default: 0
+      FORMAT:
+        type: str
+        description: |-
+          Word order of the 32-bit register: LE (default) or BE
+        default: LE
 
     databases:
       - file: $(SUPPORT)/modbus/db/aiFloat64.template
@@ -193,7 +198,7 @@ entity_models:
           HOPR:
           LOPR:
           PREC:
-          DATA_TYPE: FLOAT32_LE
+          DATA_TYPE: "FLOAT32_{{FORMAT}}"
 
   - name: modbusIntReadout
     description: |-
@@ -252,6 +257,11 @@ entity_models:
         description: |-
           Engineering Units High Limit
         default: 0
+      FORMAT:
+        type: str
+        description: |-
+          Word order of the 32-bit register: LE (default) or BE
+        default: LE
     databases:
       - file: $(SUPPORT)/modbus/db/ai.template
         args:
@@ -267,7 +277,79 @@ entity_models:
           EGUL:
           EGUF:
           SCAN:
-          MODBUS_DATA: INT32_LE
+          MODBUS_DATA: "INT32_{{FORMAT}}"
+
+  - name: modbusUIntReadout
+    description: |-
+      This will create an unsigned 32-bit point record.
+      The modbus module only supports signed INT32_LE/INT32_BE reads, so a
+      genuine unsigned counter (e.g. a cumulative energy register) whose top
+      bit is set would read back as negative. This entity reads the raw
+      signed value into a hidden helper record and corrects it (adds 2^32
+      when negative) into the public PV.
+    parameters:
+      P:
+        type: str
+        description: Device Prefix
+      R:
+        type: str
+        description: Device Suffix
+      PORT:
+        type: str
+        description: Port name for the detector
+      DESC:
+        type: str
+        description: |-
+          Readout description
+        default: Value
+      OFFSET:
+        type: int
+        description: |-
+          OFFSET register address
+      EGU:
+        type: str
+        description: |-
+          Engineering Units
+        default: None
+      HOPR:
+        type: float
+        description: |-
+          High Limit
+        default: 0
+      LOPR:
+        type: float
+        description: |-
+          Low Limit
+        default: 0
+      PREC:
+        type: int
+        description: |-
+          Precision
+        default: 0
+      SCAN:
+        type: str
+        description: |-
+          Scan Mode of the underlying raw readout
+        default: I/O Intr
+      FORMAT:
+        type: str
+        description: |-
+          Word order of the 32-bit register: LE (default) or BE
+        default: LE
+    databases:
+      - file: modbusUInt32.template
+        args:
+          P:
+          R:
+          PORT:
+          OFFSET:
+          DESC:
+          EGU:
+          HOPR:
+          LOPR:
+          PREC:
+          SCAN:
+          FORMAT:
 
   - name: modbusFloatSetpoint
     description: |-
@@ -311,6 +393,11 @@ entity_models:
         description: |-
           Process at iocInit, Default : NO
         default: "NO"
+      FORMAT:
+        type: str
+        description: |-
+          Word order of the 32-bit register: LE (default) or BE
+        default: LE
 
     databases:
       - file: $(SUPPORT)/modbus/db/aoFloat64.template
@@ -324,7 +411,7 @@ entity_models:
           LOPR:
           PREC:
           PINI:
-          DATA_TYPE: FLOAT32_LE
+          DATA_TYPE: "FLOAT32_{{FORMAT}}"
 
   - name: modbusIntSetpoint
     description: |-
@@ -353,6 +440,11 @@ entity_models:
         description: |-
           Process at iocInit, Default : NO
         default: "NO"
+      FORMAT:
+        type: str
+        description: |-
+          Word order of the 32-bit register: LE (default) or BE
+        default: LE
 
     databases:
       - file: $(SUPPORT)/modbus/db/longoutInt32.template
@@ -363,7 +455,7 @@ entity_models:
           OFFSET:
           DESC:
           PINI:
-          DATA_TYPE: INT32_LE
+          DATA_TYPE: "INT32_{{FORMAT}}"
 
   - name: modbusCoilReadout
     description: |-
