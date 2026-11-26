@@ -10,6 +10,14 @@ libs:
 
 organization: http://github.com/areaDetector
 
+# INFN: reconnect automatically after a real camera control loss (restores
+# GevSCPSPacketSize/GevSCPD and the acquisition state) instead of staying
+# Disconnected until an IOC restart. Pairs with the aravis heartbeat patch
+# applied in arvlib_task.yml.
+patch_file:
+  path: patches/ADAravis-R2-3-reconnect-after-control-lost.patch
+  when: true
+
 apt_developer:
   - libxext-dev
   - libglib2.0-dev

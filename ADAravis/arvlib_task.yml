@@ -4,6 +4,10 @@
       setopt -e
       git clone -b "0.8.35" --depth 1 https://github.com/AravisProject/aravis
       cd aravis
+      # INFN: don't report "control lost" when heartbeat reads go unanswered,
+      # only when the camera answers that we have no control (false positives
+      # left ADAravis Disconnected until an IOC restart)
+      git apply "{{ ibek_support_folder }}/patches/aravis-0.8.35-heartbeat-no-false-control-lost.patch" || exit 1
       meson build
       cd build
       ninja
