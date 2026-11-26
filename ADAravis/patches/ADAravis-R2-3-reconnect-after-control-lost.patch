@@ -1,0 +1,179 @@
+diff --git a/aravisApp/src/ADAravis.cpp b/aravisApp/src/ADAravis.cpp
+index 6910fd3..77fd400 100644
+--- a/aravisApp/src/ADAravis.cpp
++++ b/aravisApp/src/ADAravis.cpp
+@@ -169,6 +169,8 @@ public:
+ 
+     /** Used by connection lost callback */
+     int connectionValid;
++    /** Set by the control-lost callback: run() reconnects (INFN patch) */
++    volatile int reconnectPending;
+ 
+ protected:
+     int AravisCompleted;
+@@ -195,6 +197,15 @@ private:
+     asynStatus connectToCamera();
+     asynStatus makeCameraObject();
+     asynStatus makeStreamObject();
++    void tryReconnect();
++    void refreshReapplyCache();
++
++    /* Automatic reconnection after control loss (INFN patch) */
++    int reconnectAcquire;            /* acquire state when control was lost, -1 = none */
++    double reconnectDelay;           /* seconds between attempts, doubles up to the max */
++    epicsTimeStamp lastReconnectAttempt;
++    epicsInt64 reapplyValue[2];      /* last good stream-channel settings, see reapplyFeatures */
++    int reapplyValid[2];
+ 
+     ArvStream *stream;
+     ArvDevice *device;
+@@ -283,8 +294,15 @@ void ADAravis::newBufferCallback(ArvStream *stream) {
+ /** Called by aravis when control signal is lost */
+ static void controlLostCallback(ArvDevice *device, ADAravis *pPvt) {
+     pPvt->connectionValid = 0;
++    pPvt->reconnectPending = 1;
+ }
+ 
++/* Stream-channel settings a GigE camera may reset when its control session ends.
++   GevSCPSPacketSize first: changing it requires a new stream object. */
++static const char *reapplyFeatures[2] = {"GevSCPSPacketSize", "GevSCPD"};
++#define RECONNECT_DELAY_MIN 4.0
++#define RECONNECT_DELAY_MAX 60.0
++
+ /** Init hook that sets iocRunning flag */
+ static void setIocRunningFlag(initHookState state) {
+     switch(state) {
+@@ -329,6 +347,15 @@ ADAravis::ADAravis(const char *portName, const char *cameraName, int enableCachi
+     const char *functionName = "ADAravis";
+     char tempString[256];
+ 
++    this->reconnectPending = 0;
++    this->reconnectAcquire = -1;
++    this->reconnectDelay = RECONNECT_DELAY_MIN;
++    epicsTimeGetCurrent(&this->lastReconnectAttempt);
++    for (int i = 0; i < 2; i++) {
++        this->reapplyValue[i] = 0;
++        this->reapplyValid[i] = 0;
++    }
++
+     /* glib initialisation */
+     //g_type_init ();
+ 
+@@ -670,6 +697,96 @@ asynStatus ADAravis::allocBuffer() {
+     return asynSuccess;
+ }
+ 
++/** INFN patch: remember the last stream-channel settings read successfully from
++    the camera. Called with the lock held. Failed reads (e.g. the seconds before a
++    control loss) never overwrite a good value. */
++void ADAravis::refreshReapplyCache() {
++    if (this->device == NULL || !ARV_IS_GV_DEVICE(this->device) || this->connectionValid != 1)
++        return;
++    for (int i = 0; i < 2; i++) {
++        GError *error = NULL;
++        gint64 value = arv_device_get_integer_feature_value(this->device, reapplyFeatures[i], &error);
++        if (error == NULL) {
++            this->reapplyValue[i] = value;
++            this->reapplyValid[i] = 1;
++        } else {
++            g_clear_error(&error);
++        }
++    }
++}
++
++/** INFN patch: reconnect after aravis reported control loss, without an IOC restart.
++    Called from run() without the lock. Restores the stream-channel settings and the
++    acquisition state the camera had when control was lost. */
++void ADAravis::tryReconnect() {
++    static const char *functionName = "tryReconnect";
++    epicsTimeStamp now;
++
++    epicsTimeGetCurrent(&now);
++    if (epicsTimeDiffInSeconds(&now, &this->lastReconnectAttempt) < this->reconnectDelay)
++        return;
++    this->lastReconnectAttempt = now;
++
++    this->lock();
++    if (this->reconnectAcquire < 0) {
++        getIntegerParam(ADAcquire, &this->reconnectAcquire);
++        asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR,
++            "%s::%s: camera %s: control lost (acquire=%d), reconnecting\n",
++            driverName, functionName, this->cameraName, this->reconnectAcquire);
++    }
++    setIntegerParam(ADStatus, ADStatusDisconnected);
++    setStringParam(ADStatusMessage, "Control lost, reconnecting");
++    callParamCallbacks();
++
++    /* The camera may still treat the old session as its controller; release it so
++       the new session gets control now rather than after the camera heartbeat timeout. */
++    if (this->device != NULL && ARV_IS_GV_DEVICE(this->device))
++        arv_gv_device_leave_control(ARV_GV_DEVICE(this->device), NULL);
++
++    asynStatus status = this->connectToCamera();
++    if (status == asynSuccess && this->connectionValid == 1 && this->device != NULL) {
++        int newStream = 0;
++        for (int i = 0; i < 2; i++) {
++            if (!this->reapplyValid[i]) continue;
++            GError *error = NULL;
++            gint64 current = arv_device_get_integer_feature_value(this->device, reapplyFeatures[i], &error);
++            g_clear_error(&error);
++            if (current != this->reapplyValue[i]) {
++                arv_device_set_integer_feature_value(this->device, reapplyFeatures[i],
++                                                     this->reapplyValue[i], &error);
++                asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR,
++                    "%s::%s: camera %s: %s was %lld after reconnect, restored %lld%s%s\n",
++                    driverName, functionName, this->cameraName, reapplyFeatures[i],
++                    (long long) current, (long long) this->reapplyValue[i],
++                    error ? " FAILED: " : "", error ? error->message : "");
++                if (error == NULL && i == 0) newStream = 1;
++                g_clear_error(&error);
++            }
++        }
++        if (newStream) this->makeStreamObject();
++        this->reconnectPending = 0;
++        this->reconnectDelay = RECONNECT_DELAY_MIN;
++        if (this->reconnectAcquire == 1) {
++            if (this->startCapture() == asynSuccess) setIntegerParam(ADAcquire, 1);
++        }
++        asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR,
++            "%s::%s: camera %s: reconnected%s\n", driverName, functionName, this->cameraName,
++            this->reconnectAcquire == 1 ? ", acquisition restarted" : "");
++        setStringParam(ADStatusMessage, "Reconnected after control loss");
++        this->reconnectAcquire = -1;
++    } else {
++        this->connectionValid = 0;
++        setIntegerParam(ADStatus, ADStatusDisconnected);
++        this->reconnectDelay = this->reconnectDelay * 2 > RECONNECT_DELAY_MAX ?
++                               RECONNECT_DELAY_MAX : this->reconnectDelay * 2;
++        asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR,
++            "%s::%s: camera %s: reconnect failed, next attempt in %.0f s\n",
++            driverName, functionName, this->cameraName, this->reconnectDelay);
++    }
++    callParamCallbacks();
++    this->unlock();
++}
++
+ /** Check what event we have, and deal with new frames.
+     this->camera exists, lock not taken */
+ void ADAravis::run() {
+@@ -686,6 +803,20 @@ void ADAravis::run() {
+     /* Loop forever */
+     epicsTimeGetCurrent(&lastFeatureGet);
+     while (1) {
++        /* INFN patch: reconnect after control loss, otherwise keep the
++           stream-channel settings cache fresh (every 2 s) */
++        if (this->reconnectPending) {
++            this->tryReconnect();
++        } else if (this->connectionValid == 1) {
++            epicsTimeStamp now;
++            epicsTimeGetCurrent(&now);
++            if (epicsTimeDiffInSeconds(&now, &lastFeatureGet) > 2.0) {
++                lastFeatureGet = now;
++                this->lock();
++                this->refreshReapplyCache();
++                this->unlock();
++            }
++        }
+         /* Wait 5ms for an array to arrive from the queue */
+         if (epicsMessageQueueReceiveWithTimeout(this->msgQId, &buffer, sizeof(&buffer), 0.005) == -1) {
+         } else {

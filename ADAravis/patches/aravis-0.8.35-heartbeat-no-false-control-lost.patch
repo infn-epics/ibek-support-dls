@@ -1,0 +1,44 @@
+diff --git a/src/arvgvdevice.c b/src/arvgvdevice.c
+index 0726dc8..36c7b3d 100644
+--- a/src/arvgvdevice.c
++++ b/src/arvgvdevice.c
+@@ -446,7 +446,7 @@ arv_gv_device_heartbeat_thread (void *data)
+ 	GPollFD poll_fd;
+ 	gboolean use_poll;
+ 	GTimer *timer;
+-	guint32 value;
++	guint32 value = 0;
+ 
+ 	timer = g_timer_new ();
+ 
+@@ -465,9 +465,12 @@ arv_gv_device_heartbeat_thread (void *data)
+ 			 * timeout value, which is interresting, as doing this we could get an error
+ 			 * ack packet which will indicate we lost the control access. */
+ 
++			gboolean read_ok;
++
+ 			g_timer_start (timer);
+ 
+-			while (!_read_register (io_data, ARV_GVBS_CONTROL_CHANNEL_PRIVILEGE_OFFSET, &value, NULL) &&
++			while (!(read_ok = _read_register (io_data, ARV_GVBS_CONTROL_CHANNEL_PRIVILEGE_OFFSET,
++							   &value, NULL)) &&
+ 			       g_timer_elapsed (timer, NULL) < ARV_GV_DEVICE_HEARTBEAT_RETRY_TIMEOUT_S &&
+ 			       !g_cancellable_is_cancelled (thread_data->cancellable)) {
+ 				g_usleep (ARV_GV_DEVICE_HEARTBEAT_RETRY_DELAY_US);
+@@ -480,7 +483,15 @@ arv_gv_device_heartbeat_thread (void *data)
+ 				if (counter > 1)
+ 					arv_debug_device ("[GvDevice::Heartbeat] Tried %u times", counter);
+ 
+-				if ((value & (ARV_GVBS_CONTROL_CHANNEL_PRIVILEGE_CONTROL |
++				/* A failed read zeroes value (see _send_cmd_and_receive_ack), which used to be
++				 * reported as "control lost" although the device never answered that we lost
++				 * it. Only trust an actual answer: if the device really dropped us (heartbeat
++				 * timeout on its side), the next successful read returns 0 and we report it then. */
++				if (!read_ok) {
++					arv_warning_device ("[GvDevice::Heartbeat] No answer for %.1f s (%u tries), "
++							    "not treating it as control lost",
++							    g_timer_elapsed (timer, NULL), counter);
++				} else if ((value & (ARV_GVBS_CONTROL_CHANNEL_PRIVILEGE_CONTROL |
+ 					      ARV_GVBS_CONTROL_CHANNEL_PRIVILEGE_EXCLUSIVE)) == 0) {
+ 					arv_warning_device ("[GvDevice::Heartbeat] Control access lost");
+ 
